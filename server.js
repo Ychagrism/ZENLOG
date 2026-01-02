@@ -1,62 +1,56 @@
 const WebSocket = require('ws');
 const http = require('http');
 
-// Create a basic HTTP server (Required for health checks by cloud providers)
+// HTTP Server for Health Checks
 const server = http.createServer((req, res) => {
     res.writeHead(200);
     res.end('Sentinel Server Active');
 });
 
-// Attach WebSocket Server
 const wss = new WebSocket.Server({ server });
-
-// In-memory store (Use Redis for persistence if scaling >1000 agents)
 let agents = {};
-
-function heartbeat() {
-    this.isAlive = true;
-}
 
 wss.on('connection', (ws) => {
     ws.isAlive = true;
-    ws.on('pong', heartbeat);
+    ws.on('pong', () => ws.isAlive = true);
 
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
 
-            // HANDLE AGENT HEARTBEAT
+            // 1. AGENT REPORT
             if (data.type === 'AGENT_REPORT') {
                 agents[data.agentId] = {
+                    status: 'ONLINE',
                     ...data.payload,
                     lastSeen: Date.now()
                 };
             }
 
-            // HANDLE DASHBOARD REQUEST
-            if (data.type === 'DASHBOARD_REQ') {
-                // Prune agents not seen in 60 seconds
-                const now = Date.now();
-                Object.keys(agents).forEach(key => {
-                    if (now - agents[key].lastSeen > 60000) {
-                        delete agents[key];
-                    }
-                });
-                
-                ws.send(JSON.stringify({
-                    type: 'DASHBOARD_DATA',
-                    data: agents
-                }));
+            // 2. AGENT PAUSED
+            if (data.type === 'AGENT_PAUSED') {
+                if (agents[data.agentId]) {
+                    agents[data.agentId].status = 'PAUSED';
+                    agents[data.agentId].lastSeen = Date.now();
+                }
             }
 
-        } catch (e) {
-            console.error("Parse Error:", e);
-        }
+            // 3. DASHBOARD REQUEST
+            if (data.type === 'DASHBOARD_REQ') {
+                // Remove agents offline for > 60 seconds
+                const now = Date.now();
+                Object.keys(agents).forEach(k => {
+                    if (now - agents[k].lastSeen > 60000) delete agents[k];
+                });
+                
+                ws.send(JSON.stringify({ type: 'DASHBOARD_DATA', data: agents }));
+            }
+        } catch (e) { console.error(e); }
     });
 });
 
-// Interval to check for broken connections
-const interval = setInterval(() => {
+// Cleanup dead connections
+setInterval(() => {
     wss.clients.forEach((ws) => {
         if (ws.isAlive === false) return ws.terminate();
         ws.isAlive = false;
@@ -64,9 +58,5 @@ const interval = setInterval(() => {
     });
 }, 30000);
 
-wss.on('close', () => clearInterval(interval));
-
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`Listening on ${PORT}`));
