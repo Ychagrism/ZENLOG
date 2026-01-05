@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel // Operations Center</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-yellow: #eab308;
+            --accent-blue: #3b82f6;
+            --border: #334155;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            padding: 20px;
+            padding-bottom: 60px;
+        }
+
+        /* --- HEADER --- */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 30px;
+        }
+
+        h1 { font-weight: 800; letter-spacing: -1px; display: flex; align-items: center; gap: 10px; }
+        .live-dot { width: 12px; height: 12px; background: var(--accent-green); border-radius: 50%; box-shadow: 0 0 10px var(--accent-green); animation: pulse 2s infinite; }
+
+        .header-controls { display: flex; gap: 15px; align-items: center; }
+        
+        #connection-status {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            padding: 5px 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+        }
+
+        button {
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-export { background: var(--accent-blue); color: white; }
+        .btn-export:hover { opacity: 0.9; }
+
+        /* Sound Button */
+        .btn-sound { background: #334155; color: #94a3b8; }
+        .btn-sound.active { background: var(--accent-red); color: white; animation: pulse-red 2s infinite; }
+
+        /* ALARM DISABLE SWITCH */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #334155;
+            padding: 5px 10px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .toggle-container.armed { background: rgba(34, 197, 94, 0.2); border: 1px solid var(--accent-green); }
+        
+        .toggle-label { font-size: 0.85rem; font-weight: 600; color: #cbd5e1; user-select: none;}
+        .toggle-container.armed .toggle-label { color: var(--accent-green); }
+
+        .toggle-switch {
+            width: 36px;
+            height: 20px;
+            background: #64748b;
+            border-radius: 20px;
+            position: relative;
+            transition: background 0.3s;
+        }
+        .toggle-container.armed .toggle-switch { background: var(--accent-green); }
+
+        .toggle-knob {
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.3s;
+        }
+        .toggle-container.armed .toggle-knob { transform: translateX(16px); }
+
+
+        /* --- GRID --- */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        /* --- CARD DESIGN --- */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.2s, box-shadow 0.2s;
+            /* Height is determined by content, but tabs area is fixed now */
+        }
+        
+        .card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
+
+        .card-header {
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            background: rgba(0,0,0,0.2);
+        }
+        
+        .agent-name { font-weight: 700; font-size: 1.1rem; }
+        
+        .status-badge {
+            font-size: 0.75rem;
+            font-weight: 800;
+            padding: 4px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .bg-green { background: rgba(34, 197, 94, 0.2); color: var(--accent-green); }
+        .bg-red { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+        .bg-yellow { background: rgba(234, 179, 8, 0.2); color: var(--accent-yellow); }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            padding: 15px;
+            gap: 15px;
+            font-size: 0.9rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .metric-item { display: flex; flex-direction: column; gap: 4px; }
+        .metric-label { color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .metric-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 0.95rem; }
+        .metric-value.good { color: var(--accent-green); }
+        .metric-value.bad { color: var(--accent-red); }
+        .metric-value.neutral { color: var(--text-main); }
+
+        .tabs-section {
+            background: rgba(0,0,0,0.15);
+            padding: 10px 15px;
+            font-size: 0.8rem;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .tabs-header { color: var(--text-muted); font-weight: 600; font-size: 0.75rem; display: flex; justify-content: space-between; }
+        
+        /* --- FIXED HEIGHT TAB LIST --- */
+        .tabs-list {
+            height: 120px; /* CHANGED: Fixed height */
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 5px;
+            background: rgba(0,0,0,0.1);
+            border-radius: 6px;
+        }
+        
+        .tabs-list::-webkit-scrollbar { width: 6px; }
+        .tabs-list::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 3px; }
+        .tabs-list::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+
+        .tab-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            background: rgba(255,255,255,0.03);
+            padding: 6px 8px;
+            border-radius: 4px;
+            flex-shrink: 0; /* Prevents squishing */
+        }
+        .tab-icon { font-size: 10px; min-width: 15px; }
+        .tab-link { color: var(--text-muted); text-decoration: none; transition: color 0.2s; font-size: 0.8rem; width: 100%; overflow: hidden; text-overflow: ellipsis; }
+        .tab-link:hover { color: var(--accent-blue); }
+
+        footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            padding: 15px;
+            background: var(--bg-dark);
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-family: 'JetBrains Mono', monospace;
+            z-index: 100;
+        }
+
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        
+        .empty-state { grid-column: 1 / -1; text-align: center; padding: 50px; color: var(--text-muted); border: 2px dashed var(--border); border-radius: 12px; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1><div class="live-dot"></div> SENTINEL PRO</h1>
+        <div class="header-controls">
+            <div id="connection-status">Connecting...</div>
+            
+            <div class="toggle-container" id="alarmToggle" onclick="toggleAlarmSystem()">
+                <div class="toggle-switch"><div class="toggle-knob"></div></div>
+                <span class="toggle-label" id="alarmLabel">Alarm Disabled</span>
+            </div>
+
+            <button class="btn-sound" id="indicatorSound" style="display:none;">
+                <span>🔔 Playing</span>
+            </button>
+
+            <button class="btn-export" onclick="exportCSV()">Download CSV</button>
+        </div>
+    </header>
+
+    <div id="grid" class="grid">
+        <div class="empty-state">Waiting for agents...</div>
+    </div>
+
+    <footer>
+        &copy; 2026 Yahya Chagri. All Systems Operational.
+    </footer>
+
+    <script>
+        // ✅ YOUR RENDER URL
+        const SERVER_URL = 'wss://zenlog.onrender.com';
+        
+        let socket;
+        let globalData = {};
+        let isAlarmSystemArmed = false; 
+        let hasCriticalError = false;   
+        const alarm = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+        alarm.loop = true; 
+        
+        const statusEl = document.getElementById('connection-status');
+        const grid = document.getElementById('grid');
+        const alarmToggle = document.getElementById('alarmToggle');
+        const alarmLabel = document.getElementById('alarmLabel');
+        const indicatorSound = document.getElementById('indicatorSound');
+
+        function toggleAlarmSystem() {
+            isAlarmSystemArmed = !isAlarmSystemArmed;
+            
+            if (isAlarmSystemArmed) {
+                alarmToggle.classList.add('armed');
+                alarmLabel.innerText = "Alarm Armed";
+                
+                const blip = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+                blip.volume = 0.2;
+                blip.play().catch(e => console.log("Autoplay blocked", e));
+            } else {
+                alarmToggle.classList.remove('armed');
+                alarmLabel.innerText = "Alarm Disabled";
+                stopAlarm();
+            }
+            updateAlarmState();
+        }
+
+        function stopAlarm() {
+            alarm.pause();
+            alarm.currentTime = 0;
+            indicatorSound.style.display = 'none';
+        }
+
+        function updateAlarmState() {
+            if (isAlarmSystemArmed && hasCriticalError && !document.hasFocus()) {
+                alarm.play().catch(e => console.log("Play failed", e));
+                indicatorSound.style.display = 'flex'; 
+                indicatorSound.classList.add('active');
+            } else {
+                stopAlarm();
+            }
+        }
+
+        window.addEventListener('focus', updateAlarmState);
+        window.addEventListener('blur', updateAlarmState);
+
+
+        function connect() {
+            socket = new WebSocket(SERVER_URL);
+
+            socket.onopen = () => {
+                statusEl.innerText = "● SYSTEM ONLINE";
+                statusEl.style.color = "var(--accent-green)";
+                requestData();
+            };
+
+            socket.onmessage = (e) => {
+                try {
+                    const msg = JSON.parse(e.data);
+                    if (msg.type === 'DASHBOARD_DATA') render(msg.data);
+                } catch(err) { console.error(err); }
+            };
+
+            socket.onclose = () => {
+                statusEl.innerText = "○ DISCONNECTED";
+                statusEl.style.color = "var(--accent-red)";
+                setTimeout(connect, 3000);
+            };
+        }
+
+        function requestData() {
+            if (socket.readyState === 1) socket.send(JSON.stringify({ type: 'DASHBOARD_REQ' }));
+            setTimeout(requestData, 2000);
+        }
+
+        function render(agents) {
+            globalData = agents;
+            const ids = Object.keys(agents).sort();
+            hasCriticalError = false; 
+
+            if (ids.length === 0) {
+                grid.innerHTML = '<div class="empty-state">No agents connected. Open the extension to begin.</div>';
+                return;
+            }
+
+            grid.innerHTML = ''; 
+
+            ids.forEach(id => {
+                const a = agents[id];
+                
+                if (a.status === 'PAUSED') {
+                    grid.innerHTML += `
+                        <div class="card" style="opacity: 0.6; border-color: var(--accent-yellow);">
+                            <div class="card-header">
+                                <span class="agent-name">${id}</span>
+                                <span class="status-badge bg-yellow">PAUSED</span>
+                            </div>
+                            <div class="metrics">
+                                <div style="grid-column: 1/-1; text-align:center; padding: 20px; color: var(--accent-yellow);">
+                                    Monitoring Paused.<br>
+                                    <small style="color:white;">Last seen: ${new Date(a.lastSeen).toLocaleTimeString()}</small>
+                                </div>
+                            </div>
+                            <div class="tabs-section">
+                                <div class="tabs-header"><span>OPEN TABS (0)</span></div>
+                                <div class="tabs-list" style="justify-content:center; align-items:center; color:#666;">
+                                    Paused
+                                </div>
+                            </div>
+                        </div>`;
+                    return;
+                }
+
+                const micAuth = a.mic?.permission === 'granted';
+                const micHard = a.mic?.hardware === true; 
+                const zdStatus = a.zendesk?.statusXHR || 'Waiting...';
+                const isOffline = zdStatus.toLowerCase().includes('offline');
+                const isHealthy = micAuth && micHard && !isOffline;
+
+                if (!isHealthy) hasCriticalError = true;
+
+                const badgeClass = isHealthy ? 'bg-green' : 'bg-red';
+                const badgeText = isHealthy ? 'OPERATIONAL' : 'ATTENTION';
+
+                let tabsHtml = '';
+                if (a.system?.openTabs?.length > 0) {
+                    tabsHtml = a.system.openTabs.map(t => `
+                        <div class="tab-row">
+                            <span class="tab-icon">${t.active ? '🟢' : '⚪'}</span>
+                            <a href="${t.url}" target="_blank" class="tab-link" title="${t.title}">${t.title}</a>
+                        </div>
+                    `).join('');
+                } else {
+                    tabsHtml = '<div style="color:#666; font-style:italic; padding:5px; text-align:center;">No tabs detected</div>';
+                }
+
+                const html = `
+                    <div class="card" style="border-left: 5px solid ${isHealthy ? 'var(--accent-green)' : 'var(--accent-red)'}">
+                        <div class="card-header">
+                            <span class="agent-name">${id}</span>
+                            <span class="status-badge ${badgeClass}">${badgeText}</span>
+                        </div>
+                        <div class="metrics">
+                            <div class="metric-item">
+                                <span class="metric-label">Mic Access</span>
+                                <span class="metric-value ${micAuth ? 'good' : 'bad'}">${micAuth ? 'GRANTED' : 'DENIED'}</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Mic Device</span>
+                                <span class="metric-value ${micHard ? 'good' : 'bad'}">${micHard ? 'DETECTED' : 'MISSING'}</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Zendesk Status</span>
+                                <span class="metric-value ${!isOffline ? 'good' : 'bad'}">${zdStatus}</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Mouse Active</span>
+                                <span class="metric-value neutral">${a.activity?.mouseSeconds || 0}s</span>
+                            </div>
+                        </div>
+                        <div class="tabs-section">
+                            <div class="tabs-header">
+                                <span>OPEN TABS (${a.system?.totalTabs || 0})</span>
+                            </div>
+                            <div class="tabs-list">${tabsHtml}</div>
+                        </div>
+                    </div>
+                `;
+                grid.innerHTML += html;
+            });
+            
+            updateAlarmState();
+        }
+
+        function exportCSV() {
+            let csv = "Agent ID,Status,Mic Permission,Mic Hardware,Zendesk Status,Mouse Active (s),Tabs Count\n";
+            Object.keys(globalData).forEach(id => {
+                const a = globalData[id];
+                if(a.status === 'PAUSED') {
+                    csv += `${id},PAUSED,,,,\n`;
+                } else {
+                    csv += `${id},ONLINE,${a.mic?.permission},${a.mic?.hardware},${a.zendesk?.statusXHR},${a.activity?.mouseSeconds},${a.system?.totalTabs}\n`;
+                }
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `sentinel_export_${Date.now()}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        connect();
+    </script>
+</body>
+</html>
